@@ -4,12 +4,18 @@ defmodule ForEditor.EnglishSentence do
   英文=大文字から始まりピリオドで終わる語群。
   """
 
+  @not_contraction_words ["isn't", "aren't","wasn't","weren't", "ain't"]
+
   @doc """
-  英文をパースし、リストを作成します。
+  英文をパースし、単語ごとのリストを作成します。
 
   ・".","?","!"は終端文字として扱います。
-  ・"'"は省略記法の場合、分割します
-    "I'm", "They're"など
+  ・終端文字は文の最後の文字
+  ・"'"は文の途中でも分割します。
+  ・"I'm" -> "I", "'", "m"
+  ・ただし、notの短縮形は"n't"で分割します。
+  ・"isn't" -> "is", "n't"
+
   ## パラメータ
   - input: 入力された文字列
 
@@ -19,31 +25,51 @@ defmodule ForEditor.EnglishSentence do
       ["This", "is", "a", "pen",  "."]
 
   """
-  def to_list( input ) do
+  def parse( input ) do
     input
     |> String.split()
-    |> parse()
-
-    #|> split_character()
+    |> terminate()
+    |> split_character()
+    |> split_not_contraction()
     |> Enum.filter(fn x -> x !== "" and x !== nil end)
   end
 
-  def parse([]), do: []
-  def parse([ head | tail]) do
-    {is_termination, split_character} = is_termination(head)
+  def terminate([]), do: []
+  def terminate([ head | tail]) do
+    {result, split_character} = is_termination(head)
 
-    if is_termination do
+    if result do
       [a, b] = head |> String.split(split_character)
-      [a, split_character, b | parse(tail)]
+      [a, split_character, b | terminate(tail)]
     else
-      [head | parse(tail)]
+      [head | terminate(tail)]
+    end
+  end
+
+  defp is_termination(token) do
+    termination_chars = [".", "?", "!"]
+    last_char_code = token
+                    |> String.to_charlist()
+                    |> List.last()
+    last_char = <<last_char_code::utf8>>
+
+    if Enum.member?(termination_chars, last_char) do
+      {true, last_char}
+    else
+      {false, nil}
     end
   end
 
 
+
+
   def split_character([]), do: []
   def split_character([ head | tail]) do
-    {result, split_character} = is_split_character(head)
+    {result, split_character} = if Enum.any?(@not_contraction_words, fn word -> word == head end) do
+      {false, nil}
+    else
+      is_split_character(head)
+    end
 
     if result do
       [a, b] = head |> String.split(split_character)
@@ -56,9 +82,10 @@ defmodule ForEditor.EnglishSentence do
 
 
   defp is_split_character(token) do
-    split_character = [".", "?", "!", "'"]
-    contained_chars = Enum.filter(split_character, fn char -> String.contains?(token, char) end)
+    split_chars = ["'", ","]
+    contained_chars = Enum.filter(split_chars, fn char -> String.contains?(token, char) end)
 
+    #分割する文字が1つの場合
     if length(contained_chars) == 1 do
       {true, hd(contained_chars)}
     else
@@ -66,29 +93,19 @@ defmodule ForEditor.EnglishSentence do
     end
   end
 
-  def is_termination(token) do
-    termination_chars = [".", "?", "!"]
-    last_char_code = token |> String.to_charlist()
-                      |> List.last()
-    last_char = <<last_char_code::utf8>>
+  def split_not_contraction([]), do: []
+  def split_not_contraction([ head | tail]) do
 
-    if Enum.member?(termination_chars, last_char) do
-      {true, last_char}
+    if Enum.any?(@not_contraction_words, fn word -> word == head end) do
+      [a, _] = head |> String.split("n't")
+      [a, "n't" | split_not_contraction(tail)]
     else
-      {false, nil}
+      [head | split_not_contraction(tail)]
     end
+
   end
 
-  """
-  defp is_terminating_character(token) do
-    terminating_character = [".", "?", "!"]
-    {_, last_char} = String.split_at(token, -1)
-    if Enum.member?(terminating_character, last_char) do
-      {true, last_char}
-    else
-      {false, nil}
-    end
-  end
-  """
+
+
 
 end
